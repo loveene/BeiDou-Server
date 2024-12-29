@@ -666,6 +666,9 @@ public class Monster extends AbstractLoadedLife {
             float exp = chrParticipation.getValue() * expPerDmg;
             Character chr = chrParticipation.getKey();
 
+            // 也许有问题，12/26/24 更改: 玩家杀怪加的经验值 * 经验倍数券
+            exp *= chr.getCouponExpRate();
+
             distributePlayerExperience(chr, exp, 0.0f, chr.getLevel(), true, isWhiteExpGain(chr, personalRatio, sdevRatio), false);
         }
 

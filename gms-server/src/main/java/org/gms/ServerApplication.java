@@ -60,9 +60,15 @@ public class ServerApplication {
         if (driver == null) driver = datasource.getString("driver-class-name");
         String dbUrl = getStartParam(args, "mybatis-flex.datasource.mysql.url");
         if (dbUrl == null) dbUrl = datasource.getString("url");
-        String username = getStartParam(args, "mybatis-flex.datasource.mysql.username");
+        // String username = getStartParam(args, "mybatis-flex.datasource.mysql.username");
+        String username = datasource.getString("username");
+        System.out.println("username:" + username);
+
         if (username == null) username = datasource.getString("username");
-        String password = getStartParam(args, "mybatis-flex.datasource.mysql.password");
+        // String password = getStartParam(args, "mybatis-flex.datasource.mysql.password");
+        String password = datasource.getString("password");
+        System.out.println("password:" + password);
+
         if (password == null) password = datasource.getString("password");
         String urlPrefix = dbUrl.split("\\?")[0];
         String[] dbSplit = urlPrefix.split("/");
