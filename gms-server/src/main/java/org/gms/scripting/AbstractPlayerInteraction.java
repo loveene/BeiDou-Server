@@ -592,6 +592,10 @@ public class AbstractPlayerInteraction {
     }
 
     public Item gainItem(int id, short quantity, boolean randomStats, boolean showMessage, long expires, Pet from) {
+        return gainItem(id, quantity, randomStats, showMessage, expires, from, null);
+    }
+
+    public Item gainItem(int id, short quantity, boolean randomStats, boolean showMessage, long expires, Pet from, Map<String, Integer> stats) {
         Item item = null;
         Pet evolved;
         int petId = -1;
@@ -632,7 +636,25 @@ public class AbstractPlayerInteraction {
                         it.setUpgradeSlots(3);
                     }
 
-                    if (GameConfig.getServerBoolean("use_enhanced_crafting") && c.getPlayer().isUseCS()) {
+                    // Apply custom stats if provided
+                    if (stats != null && !stats.isEmpty()) {
+                        if (stats.containsKey("str")) it.setStr((short)stats.get("str").intValue());
+                        if (stats.containsKey("dex")) it.setDex((short)stats.get("dex").intValue());
+                        if (stats.containsKey("int")) it.setInt((short)stats.get("int").intValue());
+                        if (stats.containsKey("luk")) it.setLuk((short)stats.get("luk").intValue());
+                        if (stats.containsKey("hp")) it.setHp((short)stats.get("hp").intValue());
+                        if (stats.containsKey("mp")) it.setMp((short)stats.get("mp").intValue());
+                        if (stats.containsKey("watk")) it.setWatk((short)stats.get("watk").intValue());
+                        if (stats.containsKey("matk")) it.setMatk((short)stats.get("matk").intValue());
+                        if (stats.containsKey("wdef")) it.setWdef((short)stats.get("wdef").intValue());
+                        if (stats.containsKey("mdef")) it.setMdef((short)stats.get("mdef").intValue());
+                        if (stats.containsKey("acc")) it.setAcc((short)stats.get("acc").intValue());
+                        if (stats.containsKey("avoid")) it.setAvoid((short)stats.get("avoid").intValue());
+                        if (stats.containsKey("hands")) it.setHands((short)stats.get("hands").intValue());
+                        if (stats.containsKey("speed")) it.setSpeed((short)stats.get("speed").intValue());
+                        if (stats.containsKey("jump")) it.setJump((short)stats.get("jump").intValue());
+                        if (stats.containsKey("upgradeSlots")) it.setUpgradeSlots((byte)stats.get("upgradeSlots").intValue());
+                    } else if (GameConfig.getServerBoolean("use_enhanced_crafting") && c.getPlayer().isUseCS()) {
                         Equip eqp = (Equip) item;
                         if (!(c.getPlayer().isGM() && GameConfig.getServerBoolean("use_perfect_gm_scroll"))) {
                             eqp.setUpgradeSlots((byte) (eqp.getUpgradeSlots() + 1));
@@ -1349,8 +1371,14 @@ public class AbstractPlayerInteraction {
         return getPlayer().getCurrentOnlineTime();
     }
 
-
-
-
+    /**
+     * 获取装备并自定义属性
+     * @param itemId 装备ID
+     * @param stats 属性Map，可包含以下键：str,dex,int,luk,hp,mp,watk,matk,wdef,mdef,acc,avoid,hands,speed,jump,upgradeSlots
+     * @return 获得的装备Item对象
+     */
+    public Item gainItemWithStats(int itemId, Map<String, Integer> stats) {
+        return gainItem(itemId, (short)1, false, true, -1, null, stats);
+    }
 
 }

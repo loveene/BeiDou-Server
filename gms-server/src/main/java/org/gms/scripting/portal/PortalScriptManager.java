@@ -65,18 +65,45 @@ public class PortalScriptManager extends AbstractScriptManager {
     }
 
     public boolean executePortalScript(Portal portal, Client c) {
+        // 构造脚本路径
+        String scriptName = portal.getScriptName();
+        String scriptPath = "portal/" + scriptName + ".js";
+
+        // 调试信息：向 GM 玩家发送脚本加载信息
+        if (c != null && c.getPlayer() != null && c.getPlayer().isGM()) {
+            c.getPlayer().dropMessage("[调试信息] 正在加载传送门脚本: " + scriptName);
+            c.getPlayer().dropMessage("[调试信息] 脚本路径: " + scriptPath);
+        }
+
         try {
-            PortalScript script = getPortalScript(portal.getScriptName());
+            // 获取传送门脚本
+            PortalScript script = getPortalScript(scriptName);
+
+            // 如果脚本存在，则执行
             if (script != null) {
+                if (c != null && c.getPlayer() != null && c.getPlayer().isGM()) {
+                    c.getPlayer().dropMessage("[调试信息] 成功加载传送门脚本: " + scriptName);
+                }
                 return script.enter(new PortalPlayerInteraction(c, portal));
+            } else {
+                log.warn("传送门脚本未找到: {}", scriptPath);
+                if (c != null && c.getPlayer() != null && c.getPlayer().isGM()) {
+                    c.getPlayer().dropMessage("[调试信息] 传送门脚本未找到: " + scriptName);
+                }
             }
         } catch (Exception e) {
+            // 记录错误日志
+            log.warn("传送门脚本执行失败: {} - 错误详情: {}", scriptPath, e.getMessage(), e);
 
-            log.warn("Portal script error in: {}", portal.getScriptName(), e);
+            // 向 GM 玩家发送错误信息
+            if (c != null && c.getPlayer() != null && c.getPlayer().isGM()) {
+                c.getPlayer().dropMessage("[调试信息] 传送门脚本执行失败: " + scriptName);
+                c.getPlayer().dropMessage("[调试信息] 错误详情: " + e.getMessage());
+            }
         }
+
         return false;
     }
-
     public void reloadPortalScripts() {
         scripts.clear();
     }

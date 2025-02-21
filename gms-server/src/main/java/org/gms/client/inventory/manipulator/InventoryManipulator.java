@@ -499,6 +499,11 @@ public class InventoryManipulator {
         if (source == null) {
             return;
         }
+
+        // 添加 GM 调试信息
+        if (c.getPlayer().isGM()) {
+            c.getPlayer().dropMessage("移动物品: src : " + (int) src + " dst : " + (int) dst + " ID：" + source.getItemId());
+        }
         short olddstQ = -1;
         if (initialTarget != null) {
             olddstQ = initialTarget.getQuantity();
@@ -537,6 +542,12 @@ public class InventoryManipulator {
         Inventory eqpdInv = chr.getInventory(InventoryType.EQUIPPED);
 
         Equip source = (Equip) eqpInv.getItem(src);
+
+        // 添加 GM 调试信息
+        if (chr.isGM()) {
+            c.getPlayer().dropMessage("装备物品: src : " + (int) src + " dst : " + (int) dst + " ID：" + source.getItemId());
+        }
+
         int itemGender = ItemId.getGender(source.getItemId());
         //控制台参数为true时进行校验判断
         if(GameConfig.getServerBoolean("use_equipment_gender_limit") && itemGender != 2 && itemGender != chr.getGender()) {  //判断装备是否要求角色性别
@@ -680,6 +691,11 @@ public class InventoryManipulator {
         if (source == null) {
             return;
         }
+        // 添加 GM 调试信息
+        if (chr.isGM()) {
+            c.getPlayer().dropMessage("卸下装备: src : " + (int) src + " dst : " + (int) dst + " ID：" + source.getItemId());
+        }
+
         if (target != null && src <= 0) {
             c.sendPacket(PacketCreator.getInventoryFull());
             return;

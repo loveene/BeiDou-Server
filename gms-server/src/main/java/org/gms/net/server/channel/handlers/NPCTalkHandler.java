@@ -54,6 +54,11 @@ public final class NPCTalkHandler extends AbstractPacketHandler {
         int oid = p.readInt();
         MapObject obj = c.getPlayer().getMap().getMapObject(oid);
         if (obj instanceof NPC npc) {
+            //NPC对话提示   游戏中显示为蓝色字体
+            if (c.getPlayer().isGM()) {
+                String ret = "[系统提示]您已经建立与NPC: " + npc.getName() + " (" + npc.getId() + ")的对话。 ";
+                c.sendPacket(PacketCreator.serverNotice(0, ret));
+            }
             if (GameConfig.getServerBoolean("use_debug") && c.getPlayer().isGM()) {
                 c.getPlayer().dropMessage(5, I18nUtil.getMessage("NPCTalkHandler.handlePacket.message1") + npc.getId());
             }

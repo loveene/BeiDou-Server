@@ -90,15 +90,20 @@ public class NPCScriptManager extends AbstractScriptManager {
                 return;
             }
             cms.put(c, cm);
-            ScriptEngine engine = getInvocableScriptEngine("npc/" + filename + ".js", c);
 
+            // 提示对话文件夹路径（仅对 GM 可见）
+            String scriptPath = "npc/" + filename + ".js";
+            if (c.getPlayer().isGM()) {
+                c.getPlayer().dropMessage(5, "对话路径: [scripts/" + scriptPath + "]");
+            }
+
+            ScriptEngine engine = getInvocableScriptEngine(scriptPath, c);
             if (engine == null) {
                 c.getPlayer().dropMessage(1, "NPC " + npc + " is uncoded.");
                 cm.dispose();
                 return;
             }
             engine.put("cm", cm);
-
             Invocable invocable = (Invocable) engine;
             scripts.put(c, invocable);
             try {
@@ -106,13 +111,11 @@ public class NPCScriptManager extends AbstractScriptManager {
             } catch (final NoSuchMethodException nsme) {
                 nsme.printStackTrace();
             }
-
         } catch (final Exception e) {
             log.error("Error starting NPC script: {}", npc, e);
             dispose(c);
         }
     }
-
     private boolean start(Client c, int npc, int oid, String fileName, Character chr, boolean itemScript, String engineName) {
         try {
             final NPCConversationManager cm = new NPCConversationManager(c, npc, oid, fileName, itemScript);
@@ -121,30 +124,43 @@ public class NPCScriptManager extends AbstractScriptManager {
             }
             if (c.canClickNPC()) {
                 cms.put(c, cm);
+
                 ScriptEngine engine = null;
+                String scriptPath = null;
+
                 if (!itemScript) {
                     if (fileName != null) {
-                        engine = getInvocableScriptEngine("npc/" + fileName + ".js", c);
+                        scriptPath = "npc/" + fileName + ".js";
+                        engine = getInvocableScriptEngine(scriptPath, c);
                         if (engine == null) {
-                            engine = getInvocableScriptEngine("BeiDouSpecial/" + fileName + ".js", c);
+                            scriptPath = "BeiDouSpecial/" + fileName + ".js";
+                            engine = getInvocableScriptEngine(scriptPath, c);
                         }
                     }
                 } else {
-                    if (fileName != null) {     // thanks MiLin for drafting NPC-based item scripts
-                        engine = getInvocableScriptEngine("item/" + fileName + ".js", c);
+                    if (fileName != null) {
+                        scriptPath = "item/" + fileName + ".js";
+                        engine = getInvocableScriptEngine(scriptPath, c);
                     }
                 }
+
                 if (engine == null) {
-                    engine = getInvocableScriptEngine("npc/" + npc + ".js", c);
+                    scriptPath = "npc/" + npc + ".js";
+                    engine = getInvocableScriptEngine(scriptPath, c);
                     cm.resetItemScript();
+                }
+
+                // 提示对话文件夹路径（仅对 GM 可见）
+                if (c.getPlayer().isGM() && scriptPath != null) {
+                    c.getPlayer().dropMessage(5, "对话路径: [scripts/" + scriptPath + "]");
                 }
 
                 if (engine == null) {
                     dispose(c);
                     return false;
                 }
-                engine.put(engineName, cm);
 
+                engine.put(engineName, cm);
                 Invocable iv = (Invocable) engine;
                 scripts.put(c, iv);
                 c.setClickedNPC();
@@ -164,7 +180,6 @@ public class NPCScriptManager extends AbstractScriptManager {
         } catch (Exception e) {
             log.error("Error starting NPC script: {}", npc, e);
             dispose(c, true);
-
             return false;
         }
     }
