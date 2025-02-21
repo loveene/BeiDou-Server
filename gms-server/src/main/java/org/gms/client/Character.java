@@ -878,7 +878,7 @@ public class Character extends AbstractCharacterObject {
                 getMap().broadcastGMMessage(this, PacketCreator.giveForeignBuff(id, ldsstat), false);
                 this.releaseControlledMonsters();
             }
-            sendPacket(PacketCreator.enableActions());
+            enableActions();
         }
     }
 
@@ -1929,7 +1929,7 @@ public class Character extends AbstractCharacterObject {
 
         if (ob instanceof MapItem mapitem) {
             if (System.currentTimeMillis() - mapitem.getDropTime() < 400 || !mapitem.canBePickedBy(this)) {
-                sendPacket(PacketCreator.enableActions());
+                enableActions();
                 return;
             }
 
@@ -1943,7 +1943,7 @@ public class Character extends AbstractCharacterObject {
             try {
                 if (mapitem.isPickedUp()) {
                     sendPacket(PacketCreator.showItemUnavailable());
-                    sendPacket(PacketCreator.enableActions());
+                    enableActions();
                     return;
                 }
 
@@ -1985,21 +1985,21 @@ public class Character extends AbstractCharacterObject {
                             } else if (InventoryManipulator.addFromDrop(client, mItem, true)) {
                                 this.getMap().pickItemDrop(pickupPacket, mapitem);
                             } else {
-                                sendPacket(PacketCreator.enableActions());
+                                enableActions();
                                 return;
                             }
                         } else {
                             sendPacket(PacketCreator.showItemUnavailable());
-                            sendPacket(PacketCreator.enableActions());
+                            enableActions();
                             return;
                         }
-                        sendPacket(PacketCreator.enableActions());
+                        enableActions();
                         return;
                     }
 
                     if (!this.needQuestItem(mapitem.getQuest(), mapitem.getItemId())) {
                         sendPacket(PacketCreator.showItemUnavailable());
-                        sendPacket(PacketCreator.enableActions());
+                        enableActions();
                         return;
                     }
 
@@ -2020,7 +2020,7 @@ public class Character extends AbstractCharacterObject {
                             itemScript = info;
                         } else {
                             if (!InventoryManipulator.addFromDrop(client, mItem, true)) {
-                                sendPacket(PacketCreator.enableActions());
+                                enableActions();
                                 return;
                             }
                         }
@@ -2039,7 +2039,7 @@ public class Character extends AbstractCharacterObject {
                             updateAriantScore();
                         }
                     } else {
-                        sendPacket(PacketCreator.enableActions());
+                        enableActions();
                         return;
                     }
 
@@ -2057,7 +2057,7 @@ public class Character extends AbstractCharacterObject {
                 ism.runItemScript(client, itemScript);
             }
         }
-        sendPacket(PacketCreator.enableActions());
+        enableActions();
     }
 
     public int countItem(int itemid) {
@@ -2578,6 +2578,11 @@ public class Character extends AbstractCharacterObject {
         dropMessage(0, message);
     }
 
+    /**
+     * 给玩家角色发送消息
+     * @param type  0=聊天窗[note]蓝色消息；1=中间弹窗；2=？；3=？；4=？；5=聊天窗红色消息；6=聊天窗黄色消息
+     * @param message
+     */
     public void dropMessage(int type, String message) {
         sendPacket(PacketCreator.serverNotice(type, message));
     }
@@ -3005,7 +3010,7 @@ public class Character extends AbstractCharacterObject {
                 sendPacket(PacketCreator.getShowMesoGain(gain, inChat));
             }
         } else {
-            sendPacket(PacketCreator.enableActions());
+            enableActions();
         }
     }
 
@@ -6587,7 +6592,7 @@ public class Character extends AbstractCharacterObject {
         }
 
         unsitChairInternal();
-        sendPacket(PacketCreator.enableActions());
+        enableActions();
     }
 
     private void unsitChairInternal() {
@@ -6615,7 +6620,7 @@ public class Character extends AbstractCharacterObject {
                     setChair(itemId);
                     getMap().broadcastMessage(this, PacketCreator.showChair(this.getId(), itemId), false);
                 }
-                sendPacket(PacketCreator.enableActions());
+                enableActions();
             } else if (itemId >= 0) {    // sit on map chair
                 if (chair.get() < 0) {
                     setChair(itemId);
@@ -8522,7 +8527,7 @@ public class Character extends AbstractCharacterObject {
         commitExcludedItems();
 
         sendPacket(PacketCreator.petStatUpdate(this));
-        sendPacket(PacketCreator.enableActions());
+        enableActions();
     }
 
     public void updateMacros(int position, SkillMacro updateMacro) {
@@ -8854,7 +8859,7 @@ public class Character extends AbstractCharacterObject {
     public void blockPortal(String scriptName) {
         if (!blockedPortals.contains(scriptName) && scriptName != null) {
             blockedPortals.add(scriptName);
-            sendPacket(PacketCreator.enableActions());
+            enableActions();
         }
     }
 
@@ -9614,8 +9619,15 @@ public class Character extends AbstractCharacterObject {
                     mapid);
             dropMessage(5, msg);                 //聊天窗红色消息提示
             dropMessage(1, msg);                 //弹窗消息
-            sendPacket(PacketCreator.enableActions());
+            enableActions();
         }
         return map;
+    }
+
+    /**
+     * 通知客户端启用操作，解除假死
+     */
+    public void enableActions() {
+        sendPacket(PacketCreator.enableActions());
     }
 }
