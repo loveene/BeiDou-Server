@@ -79,6 +79,10 @@ public final class CloseRangeDamageHandler extends AbstractDealDamageHandler {
         }
 
         chr.getMap().broadcastMessage(chr, PacketCreator.closeRangeAttack(chr, attack.skill, attack.skilllevel, attack.stance, attack.numAttackedAndDamage, attack.allDamage, attack.speed, attack.direction, attack.display), false, true);
+
+        if (chr.吸怪特权 == 1) {
+            chr.吸怪(); // 调用玩家类中的吸怪方法
+        }
         int numFinisherOrbs = 0;
         Integer comboBuff = chr.getBuffedValue(BuffStat.COMBO);
         if (GameConstants.isFinisherSkill(attack.skill)) {

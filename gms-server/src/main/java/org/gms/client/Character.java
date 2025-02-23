@@ -77,6 +77,8 @@ import org.gms.server.life.*;
 import org.gms.server.maps.*;
 import org.gms.server.maps.MiniGame.MiniGameResult;
 import org.gms.server.minigame.RockPaperScissor;
+import org.gms.server.movement.JumpDownMovement;
+import org.gms.server.movement.LifeMovementFragment;
 import org.gms.server.partyquest.AriantColiseum;
 import org.gms.server.partyquest.MonsterCarnival;
 import org.gms.server.partyquest.MonsterCarnivalParty;
@@ -104,6 +106,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static com.ibm.icu.text.PluralRules.Operand.c;
 import static java.util.concurrent.TimeUnit.*;
 
 public class Character extends AbstractCharacterObject {
@@ -1689,7 +1692,6 @@ public class Character extends AbstractCharacterObject {
         if (getMap(to.getId(), true) == null) return; //判断地图不存在则直接返回并发送提示消息。
 
         this.mapTransitioning.set(true);
-
         this.unregisterChairBuff();
         this.clearBanishPlayerData();
         Trade.cancelTrade(this, Trade.TradeResult.UNSUCCESSFUL_ANOTHER_MAP);
@@ -1703,6 +1705,7 @@ public class Character extends AbstractCharacterObject {
 
         sendPacket(warpPacket);
         map.removePlayer(this);
+        this.吸怪特权 = 0;
         if (client.getChannelServer().getPlayerStorage().getCharacterById(getId()) != null) {
             map = to;
             setPosition(pos);
@@ -1750,6 +1753,93 @@ public class Character extends AbstractCharacterObject {
         }
     }
 
+
+    // 添加吸怪特权字段
+    public int 吸怪特权 = 0;
+
+    // 获取吸怪特权状态
+    public int get吸怪特权() {
+        return this.吸怪特权;
+    }
+
+    private transient List<LifeMovementFragment> 吸怪RES;
+
+    public List<LifeMovementFragment> get吸怪Res() {
+        return this.吸怪RES;
+    }
+
+    public void set吸怪Res(final List<LifeMovementFragment> 吸怪RES) {
+        this.吸怪RES = 吸怪RES;
+    }
+
+    /**
+     * 玩家攻击时吸怪状态
+     * @return boolean
+     */
+    public void 吸怪() {
+        // 获取当前地图
+        MapleMap map = this.getMap();
+
+        // 检查玩家是否开启了吸怪特权
+        if (this.吸怪特权 != 1) {
+            this.dropMessage(5, "你尚未开启吸怪特权！");
+            return;
+        }
+
+        // 获取保存的吸怪点
+        List<LifeMovementFragment> moveRes = this.get吸怪Res();
+        if (moveRes == null || moveRes.isEmpty()) {
+            this.dropMessage(5, "未找到吸怪点，请先开启吸怪特权！");
+            return;
+        }
+
+        LifeMovementFragment fragment = moveRes.get(0);
+        if (!(fragment instanceof JumpDownMovement)) {
+            this.dropMessage(5, "吸怪点数据异常！");
+            return;
+        }
+
+        // 获取吸怪点的位置
+        Point 吸怪点位置 = ((JumpDownMovement) fragment).getPosition();
+
+        // 遍历地图上的所有怪物
+        List<Monster> monsters = map.getAllMonsters();
+        if (monsters.isEmpty()) {
+            this.dropMessage(5, "当前地图没有怪物！");
+            return;
+        }
+
+        for (Monster monster : monsters) {
+            if (monster == null || !monster.isAlive() || monster.getStats().isBoss()) {
+                continue; // 跳过无效、死亡或 Boss 怪物
+            }
+
+            // 移除怪物当前的控制器和仇恨
+            monster.aggroRemoveController();
+
+            // 设置怪物的新位置为吸怪点位置
+            monster.resetMobPosition(吸怪点位置);
+
+            // 切换怪物的控制器为目标玩家
+            monster.aggroSwitchController(this, true);
+
+            // 广播怪物移动信息
+            map.broadcastMessage(PacketCreator.moveMonster(
+                    monster.getObjectId(),       // 怪物对象 ID
+                    false,                       // 是否使用技能
+                    -1,                          // 技能 ID
+                    0,                           // 技能等级
+                    0,                           // 动作延迟
+                    0,                           // 特殊效果
+                    吸怪点位置,                  // 目标位置
+                    monster.getIdleMovement(),   // 怪物的默认移动行为
+                    AbstractAnimatedMapObject.IDLE_MOVEMENT_PACKET_LENGTH // 数据包长度
+            ));
+        }
+
+        // 提示玩家操作成功
+     //   this.dropMessage(5, "已将全地图怪物吸到吸怪点！");
+    }
     /**
      * 玩家角色是否处于切换地图的状态
      * @return boolean
@@ -4581,6 +4671,9 @@ public class Character extends AbstractCharacterObject {
         return null;
     }
 
+
+
+    
 
     public static int getAccountIdByName(String name) {
         final int id;
@@ -9317,6 +9410,11 @@ public class Character extends AbstractCharacterObject {
             return 0;
         }
     }
+
+
+
+
+
 
     public boolean registerWorldTransfer(int newWorld) {
         try {

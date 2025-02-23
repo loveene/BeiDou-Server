@@ -43,7 +43,8 @@ public final class PlayerMapTransitionHandler extends AbstractPacketHandler {
     public final void handlePacket(InPacket p, Client c) {
 
         Character chr = c.getPlayer();
-        chr.setMapTransitionComplete();
+        chr.setMapTransitionComplete(); 
+        chr.吸怪特权 = 0;
 
         int beaconid = chr.getBuffSource(BuffStat.HOMING_BEACON);
         if (beaconid != -1) {

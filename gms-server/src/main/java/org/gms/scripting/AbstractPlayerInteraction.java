@@ -48,9 +48,12 @@ import org.gms.server.expeditions.Expedition;
 import org.gms.server.expeditions.ExpeditionBossLog;
 import org.gms.server.expeditions.ExpeditionType;
 import org.gms.server.life.*;
+import org.gms.server.maps.AbstractAnimatedMapObject;
 import org.gms.server.maps.MapObject;
 import org.gms.server.maps.MapObjectType;
 import org.gms.server.maps.MapleMap;
+import org.gms.server.movement.JumpDownMovement;
+import org.gms.server.movement.LifeMovementFragment;
 import org.gms.server.partyquest.PartyQuest;
 import org.gms.server.partyquest.Pyramid;
 import org.gms.server.quest.Quest;
@@ -63,6 +66,7 @@ import java.util.List;
 import java.util.*;
 
 import static java.util.concurrent.TimeUnit.DAYS;
+import static org.gms.util.PacketCreator.moveMonster;
 
 public class AbstractPlayerInteraction {
 
@@ -256,6 +260,7 @@ public class AbstractPlayerInteraction {
         return intList;
     }
 
+
     public boolean canHoldAll(List<Object> itemids) {
         List<Object> quantity = new LinkedList<>();
 
@@ -355,6 +360,160 @@ public class AbstractPlayerInteraction {
         return c.getPlayer().getQuestNoAdd(Quest.getInstance(id));
     }
 
+    ///  //////////////////////////////////////
+
+//
+//    public void 开启吸怪() {
+//        // 获取当前玩家和地图
+//        Character player = c.getPlayer();
+//        MapleMap map = player.getMap();
+//
+//        // 检查玩家是否已经有吸怪特权
+//        if (player.吸怪特权 == 1) {
+//            player.dropMessage(5, "你已经开启了吸怪特权！");
+//            return;
+//        }
+//
+//        // 设置玩家的吸怪特权
+//        player.吸怪特权 = 1;
+//
+//        // 获取玩家当前位置
+//        Point playerPosition = player.getPosition();
+//
+//        // 遍历地图上的所有怪物
+//        List<Monster> monsters = map.getAllMonsters();
+//        if (monsters.isEmpty()) {
+//            player.dropMessage(5, "当前地图没有怪物！");
+//            return;
+//        }
+//
+//        for (Monster monster : monsters) {
+//            if (monster == null || !monster.isAlive()) {
+//                continue; // 跳过无效或死亡的怪物
+//            }
+//
+//            // 移除怪物当前的控制器和仇恨
+//            monster.aggroRemoveController();
+//
+//            // 设置怪物的新位置为玩家当前位置
+//            monster.resetMobPosition(playerPosition);
+//
+//            // 切换怪物的控制器为目标玩家
+//            monster.aggroSwitchController(player, true);
+//
+//            // 广播怪物移动信息
+//            map.broadcastMessage(PacketCreator.moveMonster(
+//                    monster.getObjectId(),
+//                    false,
+//                    -1,
+//                    0,
+//                    0,
+//                    0,
+//                    playerPosition,
+//                    monster.getIdleMovement(),
+//                    AbstractAnimatedMapObject.IDLE_MOVEMENT_PACKET_LENGTH
+//            ));
+//        }
+//
+//        // 提示玩家操作成功
+//        player.dropMessage(5, "已开启吸怪特权，并将全地图怪物吸到你的位置！");
+//    }
+    public void 开启吸怪() {
+        // 获取当前玩家和地图
+        Character player = c.getPlayer();
+        MapleMap map = player.getMap();
+
+        // 检查玩家是否已经有吸怪特权
+        if (player.吸怪特权 == 1) {
+            player.dropMessage(5, "你已经开启了吸怪特权！");
+            return;
+        }
+
+        // 设置玩家的吸怪特权
+        player.吸怪特权 = 1;
+
+        // 获取玩家当前位置
+        Point playerPosition = player.getPosition();
+
+        // 创建移动路径（记录吸怪点）
+        List<LifeMovementFragment> moveRes = new ArrayList<>();
+
+        // 使用 JumpDownMovement 记录吸怪点的位置信息
+        JumpDownMovement movement = new JumpDownMovement(
+                0,              // type: 移动类型（0 表示绝对移动）
+                playerPosition, // position: 目标位置
+                100,            // duration: 持续时间（单位：毫秒）
+                0               // newstate: 新状态（通常为 0）
+        );
+        movement.setPixelsPerSecond(new Point(0, 0)); // 设置移动速度（静止）
+
+        // 设置默认平台高度（假设为玩家当前位置的 y 坐标）
+        int defaultFh = playerPosition.y; // 使用玩家的 y 坐标作为默认平台高度
+        movement.setFh(defaultFh);        // 设置目标平台高度
+        movement.setOriginFh(defaultFh);  // 设置原始平台高度
+
+        moveRes.add(movement);
+
+        // 保存吸怪点的位置信息到吸怪RES
+        player.set吸怪Res(moveRes);
+
+        // 遍历地图上的所有怪物
+        List<Monster> monsters = map.getAllMonsters();
+        if (monsters.isEmpty()) {
+            player.dropMessage(5, "当前地图没有怪物！");
+            return;
+        }
+
+        for (Monster monster : monsters) {
+            if (monster == null || !monster.isAlive()) {
+                continue; // 跳过无效或死亡的怪物
+            }
+
+            // 移除怪物当前的控制器和仇恨
+            monster.aggroRemoveController();
+
+            // 设置怪物的新位置为玩家当前位置
+            monster.resetMobPosition(playerPosition);
+
+            // 切换怪物的控制器为目标玩家
+            monster.aggroSwitchController(player, true);
+
+            // 广播怪物移动信息
+            map.broadcastMessage(PacketCreator.moveMonster(
+                    monster.getObjectId(),       // 怪物对象 ID
+                    false,                       // 是否使用技能
+                    -1,                          // 技能 ID
+                    0,                           // 技能等级
+                    0,                           // 动作延迟
+                    0,                           // 特殊效果
+                    playerPosition,              // 目标位置
+                    monster.getIdleMovement(),   // 怪物的默认移动行为
+                    AbstractAnimatedMapObject.IDLE_MOVEMENT_PACKET_LENGTH // 数据包长度
+            ));
+        }
+
+        // 提示玩家操作成功
+        player.dropMessage(5, "已开启吸怪特权，并将全地图怪物吸到你的位置！");
+    }
+    public void 关闭吸怪() {
+        // 获取当前玩家
+        Character player = c.getPlayer();
+
+        // 检查玩家是否已经关闭了吸怪特权
+        if (player.吸怪特权 == 0) {
+            player.dropMessage(5, "你已经关闭了吸怪特权！");
+            return;
+        }
+
+        // 设置玩家的吸怪特权为 0（关闭吸怪）
+        player.吸怪特权 = 0;
+
+        // 清除保存的吸怪点信息
+        player.set吸怪Res(null);
+
+        // 提示玩家操作成功
+        player.dropMessage(5, "已关闭吸怪特权！");
+    }
     //---- /\ /\ /\ /\ /\ /\ /\  NOT TESTED  /\ /\ /\ /\ /\ /\ /\ /\ /\ ----
 
     public void openNpc(int npcid) {

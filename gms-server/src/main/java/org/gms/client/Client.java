@@ -935,7 +935,7 @@ public class Client extends ChannelInboundHandlerAdapter {
 
             player.closePlayerInteractions();
             player.closePartySearchInteractions();
-
+            player.吸怪特权 = 0;
             if (!serverTransition) {    // thanks MedicOP for detecting an issue with party leader change on changing channels
                 removePartyPlayer(wserv);
 
