@@ -20,58 +20,58 @@
 
 /*
    @Author: Ronan
-*/
-package org.gms.client.command.commands.gm0;
+    */
+    package org.gms.client.command.commands.gm0;
 
-import org.gms.client.Character;
-import org.gms.client.Client;
-import org.gms.client.command.Command;
-import org.gms.config.GameConfig;
-import org.gms.server.maps.MapleMap;
-import org.gms.util.I18nUtil;
+    import org.gms.client.Character;
+    import org.gms.client.Client;
+    import org.gms.client.command.Command;
+    import org.gms.config.GameConfig;
+    import org.gms.server.maps.MapleMap;
+    import org.gms.util.I18nUtil;
 
-public class MapOwnerClaimCommand extends Command {
-    {
-        setDescription(I18nUtil.getMessage("MapOwnerClaimCommand.message1"));
-    }
+    public class MapOwnerClaimCommand extends Command {
+        {
+            setDescription(I18nUtil.getMessage("MapOwnerClaimCommand.message1"));
+        }
 
-    @Override
-    public void execute(Client c, String[] params) {
-        if (c.tryacquireClient()) {
-            try {
-                Character chr = c.getPlayer();
+        @Override
+        public void execute(Client c, String[] params) {
+            if (c.tryacquireClient()) {
+                try {
+                    Character chr = c.getPlayer();
 
-                if (GameConfig.getServerBoolean("use_map_ownership_system")) {
-                    if (chr.getEventInstance() == null) {
-                        MapleMap map = chr.getMap();
-                        if (map.countBosses() == 0) {   // thanks Conrad for suggesting bosses prevent map leasing
-                            MapleMap ownedMap = chr.getOwnedMap();  // thanks Conrad for suggesting not unlease a map as soon as player exits it
-                            if (ownedMap != null) {
-                                ownedMap.unclaimOwnership(chr);
+                    if (GameConfig.getServerBoolean("use_map_ownership_system")) {
+                        if (chr.getEventInstance() == null) {
+                            MapleMap map = chr.getMap();
+                            if (map.countBosses() == 0) {   // thanks Conrad for suggesting bosses prevent map leasing
+                                MapleMap ownedMap = chr.getOwnedMap();  // thanks Conrad for suggesting not unlease a map as soon as player exits it
+                                if (ownedMap != null) {
+                                    ownedMap.unclaimOwnership(chr);
 
-                                if (map == ownedMap) {
-                                    chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message2"));
-                                    return;
+                                    if (map == ownedMap) {
+                                        chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message2"));
+                                        return;
+                                    }
                                 }
-                            }
 
-                            if (map.claimOwnership(chr)) {
-                                chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message3"));
+                                if (map.claimOwnership(chr)) {
+                                    chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message3"));
+                                } else {
+                                    chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message4"));
+                                }
                             } else {
-                                chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message4"));
+                                chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message5"));
                             }
                         } else {
-                            chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message5"));
+                            chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message6"));
                         }
                     } else {
-                        chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message6"));
+                        chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message7"));
                     }
-                } else {
-                    chr.dropMessage(5, I18nUtil.getMessage("MapOwnerClaimCommand.message7"));
+                } finally {
+                    c.releaseClient();
                 }
-            } finally {
-                c.releaseClient();
             }
         }
     }
-}

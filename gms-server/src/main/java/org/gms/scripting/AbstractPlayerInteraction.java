@@ -361,63 +361,13 @@ public class AbstractPlayerInteraction {
     }
 
     ///  //////////////////////////////////////
+    public int getskillzq() {
+        return this.c.getPlayer().getSkillzq();
+    }
 
-//
-//    public void 开启吸怪() {
-//        // 获取当前玩家和地图
-//        Character player = c.getPlayer();
-//        MapleMap map = player.getMap();
-//
-//        // 检查玩家是否已经有吸怪特权
-//        if (player.吸怪特权 == 1) {
-//            player.dropMessage(5, "你已经开启了吸怪特权！");
-//            return;
-//        }
-//
-//        // 设置玩家的吸怪特权
-//        player.吸怪特权 = 1;
-//
-//        // 获取玩家当前位置
-//        Point playerPosition = player.getPosition();
-//
-//        // 遍历地图上的所有怪物
-//        List<Monster> monsters = map.getAllMonsters();
-//        if (monsters.isEmpty()) {
-//            player.dropMessage(5, "当前地图没有怪物！");
-//            return;
-//        }
-//
-//        for (Monster monster : monsters) {
-//            if (monster == null || !monster.isAlive()) {
-//                continue; // 跳过无效或死亡的怪物
-//            }
-//
-//            // 移除怪物当前的控制器和仇恨
-//            monster.aggroRemoveController();
-//
-//            // 设置怪物的新位置为玩家当前位置
-//            monster.resetMobPosition(playerPosition);
-//
-//            // 切换怪物的控制器为目标玩家
-//            monster.aggroSwitchController(player, true);
-//
-//            // 广播怪物移动信息
-//            map.broadcastMessage(PacketCreator.moveMonster(
-//                    monster.getObjectId(),
-//                    false,
-//                    -1,
-//                    0,
-//                    0,
-//                    0,
-//                    playerPosition,
-//                    monster.getIdleMovement(),
-//                    AbstractAnimatedMapObject.IDLE_MOVEMENT_PACKET_LENGTH
-//            ));
-//        }
-//
-//        // 提示玩家操作成功
-//        player.dropMessage(5, "已开启吸怪特权，并将全地图怪物吸到你的位置！");
-//    }
+    public void setskillzq(final int amount) {
+        this.c.getPlayer().setSkillzq(amount);
+    }
     public void 开启吸怪() {
         // 获取当前玩家和地图
         Character player = c.getPlayer();

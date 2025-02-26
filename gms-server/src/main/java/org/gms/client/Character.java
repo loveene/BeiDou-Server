@@ -4671,9 +4671,161 @@ public class Character extends AbstractCharacterObject {
         return null;
     }
 
-
-
+    public void addMountCount(int playerId, String playerName, String bossName, int points, int count) {
+        try (Connection con = DatabaseConnection.getConnection()) {
+            // 检查记录是否存在
+            boolean recordExists = false;
+            try (PreparedStatement checkPs = con.prepareStatement(
+                    "SELECT COUNT(*) AS count FROM bossrank2 WHERE cid = ? AND bossname = ? AND points = ?")) {
+                checkPs.setInt(1, playerId);
+                checkPs.setString(2, bossName);
+                checkPs.setInt(3, points);
     
+                try (ResultSet rs = checkPs.executeQuery()) {
+                    if (rs.next() && rs.getInt("count") > 0) {
+                        recordExists = true;
+                    }
+                }
+            }
+    
+            if (recordExists) {
+                // 更新现有记录
+                try (PreparedStatement updatePs = con.prepareStatement(
+                        "UPDATE bossrank2 SET count = count + ? WHERE cid = ? AND bossname = ? AND points = ?")) {
+                    updatePs.setInt(1, count);
+                    updatePs.setInt(2, playerId);
+                    updatePs.setString(3, bossName);
+                    updatePs.setInt(4, points);
+                    updatePs.executeUpdate();
+                }
+            } else {
+                // 插入新记录
+                try (PreparedStatement insertPs = con.prepareStatement(
+                        "INSERT INTO bossrank2 (cid, cname, bossname, points, count) VALUES (?, ?, ?, ?, ?)")) {
+                    insertPs.setInt(1, playerId);
+                    insertPs.setString(2, playerName);
+                    insertPs.setString(3, bossName);
+                    insertPs.setInt(4, points);
+                    insertPs.setInt(5, count);
+                    insertPs.executeUpdate();
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace(); // 记录异常信息
+        }
+    }
+    int skillzq = 0;
+
+    public int getSkillzq() {
+        return getBossLog1("坐骑");
+    }
+
+    public void gainSkillzq(final int gain) {
+        skillzq += gain;
+    }
+
+    public void setSkillzq(final int id) {
+        setBossLog1("坐骑", 1, -getBossLog1("坐骑") + id);
+    }
+    public int getBossLog1(final String boss) {
+        return this.getBossLog1(boss, 0);
+    }
+    
+    public int getBossLog1(final String boss, final int type) {
+        int count = 0;
+    
+        try (Connection con = DatabaseConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement("SELECT * FROM bosslog1 WHERE characterid = ? AND bossid = ?")) {
+    
+            ps.setInt(1, this.id);
+            ps.setString(2, boss);
+    
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    count = rs.getInt("count");
+                    Timestamp bossTime = rs.getTimestamp("time");
+    
+                    // 如果类型为 0，检查时间是否需要重置挑战次数
+                    if (type == 0 && bossTime != null) {
+                        Calendar cal = Calendar.getInstance();
+                        cal.setTimeInMillis(bossTime.getTime());
+    
+                        // 如果上次挑战的时间是前一天或更早，则重置挑战次数
+                        if (cal.get(Calendar.DAY_OF_MONTH) < Calendar.getInstance().get(Calendar.DAY_OF_MONTH) ||
+                            cal.get(Calendar.MONTH) < Calendar.getInstance().get(Calendar.MONTH)) {
+    
+                            count = 0;
+                            try (PreparedStatement psa = con.prepareStatement(
+                                    "UPDATE bosslog1 SET count = 0 WHERE characterid = ? AND bossid = ?")) {
+                                psa.setInt(1, this.id);
+                                psa.setString(2, boss);
+                                psa.executeUpdate();
+                            }
+                        }
+    
+                        // 更新时间戳为当前时间
+                        try (PreparedStatement psa2 = con.prepareStatement(
+                                "UPDATE bosslog1 SET time = CURRENT_TIMESTAMP() WHERE characterid = ? AND bossid = ?")) {
+                            psa2.setInt(1, this.id);
+                            psa2.setString(2, boss);
+                            psa2.executeUpdate();
+                        }
+                    }
+                } else {
+                    // 如果记录不存在，插入新记录
+                    try (PreparedStatement psu = con.prepareStatement(
+                            "INSERT INTO bosslog1 (characterid, bossid, count, type) VALUES (?, ?, ?, ?)")) {
+                        psu.setInt(1, this.id);
+                        psu.setString(2, boss);
+                        psu.setInt(3, 0);
+                        psu.setInt(4, type);
+                        psu.executeUpdate();
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace(); // 记录异常信息
+            return -1; // 返回错误码
+        }
+    
+        return count;
+    }
+    
+    public void setBossLog1(final String boss) {
+        this.setBossLog1(boss, 0);
+    }
+    
+    public void setBossLog1(final String boss, final int type) {
+        this.setBossLog1(boss, type, 1);
+    }
+    
+    public void setBossLog1(final String boss, final int type, final int countIncrement) {
+        try (Connection con = DatabaseConnection.getConnection();
+             PreparedStatement ps = con.prepareStatement(
+                     "UPDATE bosslog1 SET count = count + ?, type = ?, time = CURRENT_TIMESTAMP() WHERE characterid = ? AND bossid = ?")) {
+    
+            ps.setInt(1, countIncrement);
+            ps.setInt(2, type);
+            ps.setInt(3, this.id);
+            ps.setString(4, boss);
+    
+            int rowsUpdated = ps.executeUpdate();
+    
+            // 如果没有更新任何行，说明记录不存在，需要插入新记录
+            if (rowsUpdated == 0) {
+                try (PreparedStatement psInsert = con.prepareStatement(
+                        "INSERT INTO bosslog1 (characterid, bossid, count, type) VALUES (?, ?, ?, ?)")) {
+                    psInsert.setInt(1, this.id);
+                    psInsert.setString(2, boss);
+                    psInsert.setInt(3, countIncrement);
+                    psInsert.setInt(4, type);
+                    psInsert.executeUpdate();
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace(); // 记录异常信息
+        }
+    }
 
     public static int getAccountIdByName(String name) {
         final int id;

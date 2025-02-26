@@ -1284,7 +1284,7 @@ public class StatEffect {
         }
     }
 
-    private void applyBuffEffect(Character applyfrom, Character applyto, boolean primary) {
+    /*private void applyBuffEffect(Character applyfrom, Character applyto, boolean primary) {
         if (!isMonsterRiding() && !isCouponBuff() && !isMysticDoor() && !isHyperBody() && !isCombo()) {     // last mystic door already dispelled if it has been used before.
             applyto.cancelEffect(this, true, -1);
         }
@@ -1408,8 +1408,149 @@ public class StatEffect {
                 applyto.announceBattleshipHp();
             }
         }
+    }*/
+    private void applyBuffEffect(Character applyfrom, Character applyto, boolean primary) {
+        // 如果不是骑宠、优惠券增益、神秘之门、超体术或连击技能，则取消当前效果。
+        if (!isMonsterRiding() && !isCouponBuff() && !isMysticDoor() && !isHyperBody() && !isCombo()) {     
+            applyto.cancelEffect(this, true, -1);
+        }
+    
+        List<Pair<BuffStat, Integer>> localstatups = statups;
+        int localDuration = getBuffLocalDuration();
+        int localsourceid = sourceid;
+        int seconds = localDuration / 1000;
+        Mount givemount = null;
+    
+        // 骑宠相关逻辑
+        if (isMonsterRiding()) {
+            int ridingMountId = 0;
+    
+            // 如果是特定技能 ID，则使用 getSkillzq 获取骑宠 ID
+            if (sourceid == 1017 || sourceid == 10001017 || sourceid == 20001017) {
+                ridingMountId = applyfrom.getSkillzq();  // 调用 getSkillzq 方法
+            } else {
+                // 否则按原逻辑获取骑宠 ID
+                Item mount = applyfrom.getInventory(InventoryType.EQUIPPED).getItem((short) -18);
+                if (mount != null) {
+                    ridingMountId = mount.getItemId();
+                }
+                if (sourceid == Corsair.BATTLE_SHIP) {
+                    ridingMountId = ItemId.BATTLESHIP;
+                } else if (sourceid == Beginner.SPACESHIP || sourceid == Noblesse.SPACESHIP) {
+                    ridingMountId = 1932000 + applyto.getSkillLevel(sourceid);
+                } else if (sourceid == Beginner.YETI_MOUNT1 || sourceid == Noblesse.YETI_MOUNT1 || sourceid == Legend.YETI_MOUNT1) {
+                    ridingMountId = 1932003;
+                } else if (sourceid == Beginner.YETI_MOUNT2 || sourceid == Noblesse.YETI_MOUNT2 || sourceid == Legend.YETI_MOUNT2) {
+                    ridingMountId = 1932004;
+                } else if (sourceid == Beginner.WITCH_BROOMSTICK || sourceid == Noblesse.WITCH_BROOMSTICK || sourceid == Legend.WITCH_BROOMSTICK) {
+                    ridingMountId = 1932005;
+                } else if (sourceid == Beginner.BALROG_MOUNT || sourceid == Noblesse.BALROG_MOUNT || sourceid == Legend.BALROG_MOUNT) {
+                    ridingMountId = 1932010;
+                }
+            }
+    
+            // 继续原有逻辑
+            givemount = applyto.mount(ridingMountId, sourceid);
+            applyto.getClient().getWorldServer().registerMountHunger(applyto);
+            localDuration = sourceid;
+            localsourceid = ridingMountId;
+            localstatups = Collections.singletonList(new Pair<>(BuffStat.MONSTER_RIDING, 0));
+        } 
+        // 技能变形相关逻辑
+        else if (isSkillMorph()) {
+            for (int i = 0; i < localstatups.size(); i++) {
+                if (localstatups.get(i).getLeft().equals(BuffStat.MORPH)) {
+                    localstatups.set(i, new Pair<>(BuffStat.MORPH, getMorph(applyto)));
+                    break;
+                }
+            }
+        }
+    
+        // 主效果处理
+        if (primary) {
+            localDuration = alchemistModifyVal(applyfrom, localDuration, false);
+            applyto.getMap().broadcastMessage(applyto, PacketCreator.showBuffEffect(applyto.getId(), sourceid, 1, (byte) 3), false);
+        }
+    
+        // 增益效果处理
+        if (localstatups.size() > 0) {
+            Packet buff = null;
+            Packet mbuff = null;
+    
+            if (this.isActive(applyto)) {
+                buff = PacketCreator.giveBuff((skill ? sourceid : -sourceid), localDuration, localstatups);
+            }
+    
+            // 根据不同技能类型处理
+            if (isDash()) {
+                buff = PacketCreator.givePirateBuff(statups, sourceid, seconds);
+                mbuff = PacketCreator.giveForeignPirateBuff(applyto.getId(), sourceid, seconds, localstatups);
+            } else if (isWkCharge()) {
+                mbuff = PacketCreator.giveForeignWKChargeEffect(applyto.getId(), sourceid, localstatups);
+            } else if (isInfusion()) {
+                buff = PacketCreator.givePirateBuff(localstatups, sourceid, seconds);
+                mbuff = PacketCreator.giveForeignPirateBuff(applyto.getId(), sourceid, seconds, localstatups);
+            } else if (isDs()) {
+                List<Pair<BuffStat, Integer>> dsstat = Collections.singletonList(new Pair<>(BuffStat.DARKSIGHT, 0));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), dsstat);
+            } else if (isWw()) {
+                List<Pair<BuffStat, Integer>> dsstat = Collections.singletonList(new Pair<>(BuffStat.WIND_WALK, 0));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), dsstat);
+            } else if (isCombo()) {
+                Integer comboCount = applyto.getBuffedValue(BuffStat.COMBO);
+                if (comboCount == null) {
+                    comboCount = 0;
+                }
+                List<Pair<BuffStat, Integer>> cbstat = Collections.singletonList(new Pair<>(BuffStat.COMBO, comboCount));
+                buff = PacketCreator.giveBuff((skill ? sourceid : -sourceid), localDuration, cbstat);
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), cbstat);
+            } else if (isMonsterRiding()) {
+                if (sourceid == Corsair.BATTLE_SHIP) { // 战舰技能
+                    if (applyto.getBattleshipHp() <= 0) {
+                        applyto.resetBattleshipHp();
+                    }
+                    localstatups = statups;
+                }
+                buff = PacketCreator.giveBuff(localsourceid, localDuration, localstatups);
+                mbuff = PacketCreator.showMonsterRiding(applyto.getId(), givemount);
+                localDuration = duration;
+            } else if (isShadowPartner()) {
+                List<Pair<BuffStat, Integer>> stat = Collections.singletonList(new Pair<>(BuffStat.SHADOWPARTNER, 0));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), stat);
+            } else if (isSoulArrow()) {
+                List<Pair<BuffStat, Integer>> stat = Collections.singletonList(new Pair<>(BuffStat.SOULARROW, 0));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), stat);
+            } else if (isEnrage()) {
+                applyto.handleOrbconsume();
+            } else if (isMorph()) {
+                List<Pair<BuffStat, Integer>> stat = Collections.singletonList(new Pair<>(BuffStat.MORPH, getMorph(applyto)));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), stat);
+            } else if (isAriantShield()) {
+                List<Pair<BuffStat, Integer>> stat = Collections.singletonList(new Pair<>(BuffStat.AURA, 1));
+                mbuff = PacketCreator.giveForeignBuff(applyto.getId(), stat);
+            }
+    
+            // 发送增益包
+            if (buff != null) {
+                applyto.sendPacket(buff);
+            }
+    
+            long starttime = Server.getInstance().getCurrentTime();
+    
+            // 注册增益效果到目标角色
+            applyto.registerEffect(this, starttime, starttime + localDuration, false);
+    
+            // 广播外部增益包
+            if (mbuff != null) {
+                applyto.getMap().broadcastMessage(applyto, mbuff, false);
+            }
+    
+            // 如果是战舰技能，通知战舰HP
+            if (sourceid == Corsair.BATTLE_SHIP) {
+                applyto.announceBattleshipHp();
+            }
+        }
     }
-
     private int calcHPChange(Character applyfrom, boolean primary, int affectedPlayers) {
         int hpchange = 0;
         if (hp != 0) {
