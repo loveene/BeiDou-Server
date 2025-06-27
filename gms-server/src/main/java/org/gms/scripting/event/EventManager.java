@@ -30,6 +30,7 @@ import org.gms.net.server.guild.Guild;
 import org.gms.net.server.world.Party;
 import org.gms.net.server.world.PartyCharacter;
 import org.gms.net.server.world.World;
+import org.gms.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.gms.scripting.event.scheduler.EventScriptScheduler;
@@ -51,37 +52,43 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
-//import jdk.nashorn.api.scripting.ScriptUtils;
 
 /**
+ * 事件管理器，负责管理游戏中的各种事件实例
  * @author Matze
  * @author Ronan
  */
 public class EventManager {
     private static final Logger log = LoggerFactory.getLogger(EventManager.class);
-    private Invocable iv;
-    private Channel cserv;
-    private World wserv;
-    private Server server;
-    private final EventScriptScheduler ess = new EventScriptScheduler();
-    private final Map<String, EventInstanceManager> instances = new HashMap<>();
-    private final Map<String, Integer> instanceLocks = new HashMap<>();
-    private final Queue<Integer> queuedGuilds = new LinkedList<>();
-    private final Map<Integer, Integer> queuedGuildLeaders = new HashMap<>();
-    private final List<Boolean> openedLobbys;
-    private final List<EventInstanceManager> readyInstances = new LinkedList<>();
-    private Integer readyId = 0, onLoadInstances = 0;
-    private final Properties props = new Properties();
-    private final String name;
-    private final Lock lobbyLock = new ReentrantLock();
-    private final Lock queueLock = new ReentrantLock();
-    private final Lock startLock = new ReentrantLock();
+    private Invocable iv;  // 可调用的脚本引擎
+    private Channel cserv;  // 频道服务器
+    private World wserv;  // 世界服务器
+    private Server server;  // 主服务器
+    private final EventScriptScheduler ess = new EventScriptScheduler();  // 事件脚本调度器
+    private final Map<String, EventInstanceManager> instances = new HashMap<>();  // 事件实例映射表
+    private final Map<String, Integer> instanceLocks = new HashMap<>();  // 实例锁定映射表
+    private final Queue<Integer> queuedGuilds = new LinkedList<>();  // 排队中的公会队列
+    private final Map<Integer, Integer> queuedGuildLeaders = new HashMap<>();  // 排队公会及其会长映射
+    private final List<Pair<Boolean, Long>> openedLobbys;
+    private final List<EventInstanceManager> readyInstances = new LinkedList<>();  // 准备就绪的实例队列
+    private Integer readyId = 0, onLoadInstances = 0;  // 准备ID和加载中的实例数
+    private final Properties props = new Properties();  // 属性配置
+    private final String name;  // 事件名称
+    private final Lock lobbyLock = new ReentrantLock();  // 大厅锁
+    private final Lock queueLock = new ReentrantLock();  // 队列锁
+    private final Lock startLock = new ReentrantLock();  // 启动锁
 
-    private final Set<Integer> playerPermit = new HashSet<>();
-    private final Semaphore startSemaphore = new Semaphore(7);
+    private final Set<Integer> playerPermit = new HashSet<>();  // 玩家许可集合
+    private final Semaphore startSemaphore = new Semaphore(7);  // 启动信号量
 
-    private static final int maxLobbys = 8;     // an event manager holds up to this amount of concurrent lobbys
+    private static final int maxLobbys = 8;     // 一个事件管理器最多支持同时运行的大厅数量
 
+    /**
+     * 构造函数
+     * @param cserv 频道服务器
+     * @param iv 可调用的脚本引擎
+     * @param name 事件名称
+     */
     public EventManager(Channel cserv, Invocable iv, String name) {
         this.server = Server.getInstance();
         this.iv = iv;
@@ -91,15 +98,22 @@ public class EventManager {
 
         this.openedLobbys = new ArrayList<>();
         for (int i = 0; i < maxLobbys; i++) {
-            this.openedLobbys.add(false);
+            this.openedLobbys.add(new Pair<>(false, 0L));
         }
     }
 
+    /**
+     * 检查事件管理器是否已释放
+     * @return 是否已释放
+     */
     private boolean isDisposed() {
         return onLoadInstances <= -1000;
     }
 
-    public void cancel() {  // make sure to only call this when there are NO PLAYERS ONLINE to mess around with the event manager!
+    /**
+     * 取消事件管理器（确保在没有玩家在线时调用）
+     */
+    public void cancel() {
         ess.dispose();
 
         try {
@@ -139,6 +153,11 @@ public class EventManager {
         iv = null;
     }
 
+    /**
+     * 将对象列表转换为整数列表
+     * @param objects 对象列表
+     * @return 整数列表
+     */
     private List<Integer> convertToIntegerList(List<Object> objects) {
         List<Integer> intList = new ArrayList<>();
 
@@ -149,43 +168,68 @@ public class EventManager {
         return intList;
     }
 
+    /**
+     * 获取大厅延迟时间
+     * @return 延迟时间（毫秒）
+     */
     public long getLobbyDelay() {
         return GameConfig.getServerLong("event_lobby_delay");
     }
 
+    /**
+     * 获取最大大厅数量
+     * @return 最大大厅数量
+     */
     private int getMaxLobbies() {
         try {
             return (int) iv.invokeFunction("getMaxLobbies");
-        } catch (ScriptException | NoSuchMethodException ex) { // they didn't define a lobby range
+        } catch (ScriptException | NoSuchMethodException ex) { // 如果没有定义大厅范围
             return maxLobbys;
         }
     }
 
+    /**
+     * 调度事件方法
+     * @param methodName 方法名
+     * @param delay 延迟时间
+     * @return 事件调度未来对象
+     */
     public EventScheduledFuture schedule(String methodName, long delay) {
         return schedule(methodName, null, delay);
     }
 
+    /**
+     * 调度事件方法（带事件实例）
+     * @param methodName 方法名
+     * @param eim 事件实例管理器
+     * @param delay 延迟时间
+     * @return 事件调度未来对象
+     */
     public EventScheduledFuture schedule(final String methodName, final EventInstanceManager eim, long delay) {
         Runnable r = () -> {
             try {
                 iv.invokeFunction(methodName, eim);
             } catch (ScriptException | NoSuchMethodException ex) {
-                log.error("Event script schedule", ex);
+                log.error("eim（{}），methodName（{}），Event script schedule（事件脚本时间表）", eim,methodName,ex);
             }
         };
 
         ess.registerEntry(r, delay);
-
-        // hate to do that, but those schedules can still be cancelled, so well... Let GC do it's job
         return new EventScheduledFuture(r, ess);
     }
 
+    /**
+     * 在指定时间戳调度事件
+     * @param methodName 方法名
+     * @param timestamp 时间戳
+     * @return 事件调度未来对象
+     */
     public EventScheduledFuture scheduleAtTimestamp(final String methodName, long timestamp) {
         Runnable r = () -> {
             try {
                 iv.invokeFunction(methodName, (Object) null);
             } catch (ScriptException | NoSuchMethodException ex) {
-                log.error("Event script scheduleAtTimestamp", ex);
+                log.error("Event script scheduleAtTimestamp（事件脚本调度时间戳）", ex);
             }
         };
 
@@ -193,28 +237,55 @@ public class EventManager {
         return new EventScheduledFuture(r, ess);
     }
 
+    /**
+     * 获取世界服务器
+     * @return 世界服务器
+     */
     public World getWorldServer() {
         return wserv;
     }
 
+    /**
+     * 获取频道服务器
+     * @return 频道服务器
+     */
     public Channel getChannelServer() {
         return cserv;
     }
 
+    /**
+     * 获取可调用的脚本引擎
+     * @return 可调用的脚本引擎
+     */
     public Invocable getIv() {
         return iv;
     }
 
+    /**
+     * 获取指定名称的事件实例
+     * @param name 实例名称
+     * @return 事件实例管理器
+     */
     public EventInstanceManager getInstance(String name) {
         return instances.get(name);
     }
 
+    /**
+     * 获取所有事件实例
+     * @return 事件实例集合
+     */
     public Collection<EventInstanceManager> getInstances() {
         synchronized (instances) {
             return new LinkedList<>(instances.values());
         }
     }
 
+    /**
+     * 创建新的事件实例
+     * @param name 实例名称
+     * @return 事件实例管理器
+     * @throws EventInstanceInProgressException 如果实例已存在
+     */
     public EventInstanceManager newInstance(String name) throws EventInstanceInProgressException {
         EventInstanceManager ret = getReadyInstance();
 
@@ -234,6 +305,12 @@ public class EventManager {
         return ret;
     }
 
+    /**
+     * 创建新的婚姻实例
+     * @param name 实例名称
+     * @return 婚姻实例
+     * @throws EventInstanceInProgressException 如果实例已存在
+     */
     public Marriage newMarriage(String name) throws EventInstanceInProgressException {
         Marriage ret = new Marriage(this, name);
 
@@ -247,6 +324,10 @@ public class EventManager {
         return ret;
     }
 
+    /**
+     * 释放指定名称的实例
+     * @param name 实例名称
+     */
     public void disposeInstance(final String name) {
         ess.registerEntry(() -> {
             freeLobbyInstance(name);
@@ -257,35 +338,70 @@ public class EventManager {
         }, SECONDS.toMillis(GameConfig.getServerLong("event_lobby_delay")));
     }
 
+    /**
+     * 设置属性
+     * @param key 属性键
+     * @param value 属性值
+     */
     public void setProperty(String key, String value) {
         props.setProperty(key, value);
     }
 
+    /**
+     * 设置整数属性
+     * @param key 属性键
+     * @param value 属性值
+     */
     public void setIntProperty(String key, int value) {
         setProperty(key, value);
     }
 
+    /**
+     * 设置属性（整数）
+     * @param key 属性键
+     * @param value 属性值
+     */
     public void setProperty(String key, int value) {
         props.setProperty(key, value + "");
     }
 
+    /**
+     * 获取属性
+     * @param key 属性键
+     * @return 属性值
+     */
     public String getProperty(String key) {
         return props.getProperty(key);
     }
 
+    /**
+     * 获取整数属性
+     * @param key 属性键
+     * @return 属性值
+     */
     public int getIntProperty(String key) {
         return Integer.parseInt(props.getProperty(key));
     }
 
+    /**
+     * 设置大厅锁定状态
+     * @param lobbyId 大厅ID
+     * @param lock 是否锁定
+     */
     private void setLockLobby(int lobbyId, boolean lock) {
         lobbyLock.lock();
         try {
-            openedLobbys.set(lobbyId, lock);
+            openedLobbys.set(lobbyId, new Pair<>(lock, System.currentTimeMillis()));
         } finally {
             lobbyLock.unlock();
         }
     }
 
+    /**
+     * 启动大厅实例
+     * @param lobbyId 大厅ID
+     * @return 是否成功启动
+     */
     private boolean startLobbyInstance(int lobbyId) {
         lobbyLock.lock();
         try {
@@ -295,8 +411,9 @@ public class EventManager {
                 lobbyId = maxLobbys - 1;
             }
 
-            if (!openedLobbys.get(lobbyId)) {
-                openedLobbys.set(lobbyId, true);
+            Pair<Boolean, Long> pair = openedLobbys.get(lobbyId);
+            if (!pair.left || System.currentTimeMillis() - pair.right > getEventTimeout() || isNobodyInPQ()) {
+                openedLobbys.set(lobbyId, new  Pair<>(true, System.currentTimeMillis()));
                 return true;
             }
 
@@ -306,6 +423,10 @@ public class EventManager {
         }
     }
 
+    /**
+     * 释放大厅实例
+     * @param lobbyName 大厅名称
+     */
     private void freeLobbyInstance(String lobbyName) {
         Integer i = instanceLocks.get(lobbyName);
         if (i == null) {
@@ -318,10 +439,18 @@ public class EventManager {
         }
     }
 
+    /**
+     * 获取事件名称
+     * @return 事件名称
+     */
     public String getName() {
         return name;
     }
 
+    /**
+     * 获取可用的大厅实例ID
+     * @return 大厅ID，如果没有可用则返回-1
+     */
     private int availableLobbyInstance() {
         int maxLobbies = getMaxLobbies();
 
@@ -336,6 +465,11 @@ public class EventManager {
         return -1;
     }
 
+    /**
+     * 获取内部脚本异常消息
+     * @param a 异常对象
+     * @return 异常消息
+     */
     private String getInternalScriptExceptionMessage(Throwable a) {
         if (!(a instanceof ScriptException)) {
             return null;
@@ -351,10 +485,23 @@ public class EventManager {
         }
     }
 
+    /**
+     * 创建事件实例
+     * @param name 实例名称
+     * @param args 参数
+     * @return 事件实例管理器
+     * @throws ScriptException 脚本异常
+     * @throws NoSuchMethodException 方法不存在异常
+     */
     private EventInstanceManager createInstance(String name, Object... args) throws ScriptException, NoSuchMethodException {
         return (EventInstanceManager) iv.invokeFunction(name, args);
     }
 
+    /**
+     * 注册事件实例
+     * @param eventName 事件名称
+     * @param lobbyId 大厅ID
+     */
     private void registerEventInstance(String eventName, int lobbyId) {
         Integer oldLobby = instanceLocks.get(eventName);
         if (oldLobby != null) {
@@ -364,15 +511,32 @@ public class EventManager {
         instanceLocks.put(eventName, lobbyId);
     }
 
+    /**
+     * 启动远征队实例
+     * @param exped 远征队
+     * @return 是否成功启动
+     */
     public boolean startInstance(Expedition exped) {
         return startInstance(-1, exped);
     }
 
+    /**
+     * 启动远征队实例（指定大厅）
+     * @param lobbyId 大厅ID
+     * @param exped 远征队
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Expedition exped) {
         return startInstance(lobbyId, exped, exped.getLeader());
     }
 
-    //Expedition method: starts an expedition
+    /**
+     * 启动远征队实例（指定大厅和队长）
+     * @param lobbyId 大厅ID
+     * @param exped 远征队
+     * @param leader 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Expedition exped, Character leader) {
         if (this.isDisposed()) {
             return false;
@@ -419,7 +583,7 @@ public class EventManager {
 
                         eim.startEvent();
                     } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("Event script startInstance", ex);
+                        log.error("Event script startInstance（事件脚本startInstance）", ex);
                     }
 
                     return true;
@@ -436,15 +600,33 @@ public class EventManager {
         return false;
     }
 
-    //Regular method: player 
+    /**
+     * 启动玩家实例
+     * @param chr 玩家
+     * @return 是否成功启动
+     */
     public boolean startInstance(Character chr) {
         return startInstance(-1, chr);
     }
 
+    /**
+     * 启动玩家实例（指定大厅）
+     * @param lobbyId 大厅ID
+     * @param leader 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Character leader) {
         return startInstance(lobbyId, leader, leader, 1);
     }
 
+    /**
+     * 启动玩家实例（指定大厅、玩家、队长和难度）
+     * @param lobbyId 大厅ID
+     * @param chr 玩家
+     * @param leader 队长
+     * @param difficulty 难度
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Character chr, Character leader, int difficulty) {
         if (this.isDisposed()) {
             return false;
@@ -491,7 +673,7 @@ public class EventManager {
 
                         eim.startEvent();
                     } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("Event script startInstance", ex);
+                        log.error("Event script startInstance（事件脚本startInstance）", ex);
                     }
 
                     return true;
@@ -508,15 +690,35 @@ public class EventManager {
         return false;
     }
 
-    //PQ method: starts a PQ
+    /**
+     * 启动队伍实例（PQ）
+     * @param party 队伍
+     * @param map 地图
+     * @return 是否成功启动
+     */
     public boolean startInstance(Party party, MapleMap map) {
         return startInstance(-1, party, map);
     }
 
+    /**
+     * 启动队伍实例（PQ，指定大厅）
+     * @param lobbyId 大厅ID
+     * @param party 队伍
+     * @param map 地图
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Party party, MapleMap map) {
         return startInstance(lobbyId, party, map, party.getLeader().getPlayer());
     }
 
+    /**
+     * 启动队伍实例（PQ，指定大厅和队长）
+     * @param lobbyId 大厅ID
+     * @param party 队伍
+     * @param map 地图
+     * @param leader 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Party party, MapleMap map, Character leader) {
         if (this.isDisposed()) {
             return false;
@@ -563,7 +765,7 @@ public class EventManager {
 
                         eim.startEvent();
                     } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("Event script startInstance", ex);
+                        log.error("Event script startInstance（事件脚本startInstance）", ex);
                     }
 
                     return true;
@@ -580,15 +782,38 @@ public class EventManager {
         return false;
     }
 
-    //PQ method: starts a PQ with a difficulty level, requires function setup(difficulty, leaderid) instead of setup()
+    /**
+     * 启动队伍实例（PQ，带难度）
+     * @param party 队伍
+     * @param map 地图
+     * @param difficulty 难度
+     * @return 是否成功启动
+     */
     public boolean startInstance(Party party, MapleMap map, int difficulty) {
         return startInstance(-1, party, map, difficulty);
     }
 
+    /**
+     * 启动队伍实例（PQ，指定大厅和难度）
+     * @param lobbyId 大厅ID
+     * @param party 队伍
+     * @param map 地图
+     * @param difficulty 难度
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Party party, MapleMap map, int difficulty) {
         return startInstance(lobbyId, party, map, difficulty, party.getLeader().getPlayer());
     }
 
+    /**
+     * 启动队伍实例（PQ，指定大厅、难度和队长）
+     * @param lobbyId 大厅ID
+     * @param party 队伍
+     * @param map 地图
+     * @param difficulty 难度
+     * @param leader 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, Party party, MapleMap map, int difficulty, Character leader) {
         if (this.isDisposed()) {
             return false;
@@ -635,7 +860,7 @@ public class EventManager {
 
                         eim.startEvent();
                     } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("Event script startInstance", ex);
+                        log.error("Event script startInstance（事件脚本启动实例）", ex);
                     }
 
                     return true;
@@ -652,19 +877,45 @@ public class EventManager {
         return false;
     }
 
-    //non-PQ method for starting instance
+    /**
+     * 启动非PQ事件实例
+     * @param eim 事件实例管理器
+     * @param ldr 队长名称
+     * @return 是否成功启动
+     */
     public boolean startInstance(EventInstanceManager eim, String ldr) {
         return startInstance(-1, eim, ldr);
     }
 
+    /**
+     * 启动非PQ事件实例（指定队长）
+     * @param eim 事件实例管理器
+     * @param ldr 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(EventInstanceManager eim, Character ldr) {
         return startInstance(-1, eim, ldr.getName(), ldr);
     }
 
+    /**
+     * 启动非PQ事件实例（指定大厅）
+     * @param lobbyId 大厅ID
+     * @param eim 事件实例管理器
+     * @param ldr 队长名称
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, EventInstanceManager eim, String ldr) {
-        return startInstance(-1, eim, ldr, eim.getEm().getChannelServer().getPlayerStorage().getCharacterByName(ldr));  // things they make me do...
+        return startInstance(-1, eim, ldr, eim.getEm().getChannelServer().getPlayerStorage().getCharacterByName(ldr));
     }
 
+    /**
+     * 启动非PQ事件实例（指定大厅和队长）
+     * @param lobbyId 大厅ID
+     * @param eim 事件实例管理器
+     * @param ldr 队长名称
+     * @param leader 队长
+     * @return 是否成功启动
+     */
     public boolean startInstance(int lobbyId, EventInstanceManager eim, String ldr, Character leader) {
         if (this.isDisposed()) {
             return false;
@@ -702,7 +953,7 @@ public class EventManager {
 
                         eim.startEvent();
                     } catch (ScriptException | NoSuchMethodException ex) {
-                        log.error("Event script startInstance", ex);
+                        log.error("Event script startInstance（事件脚本启动实例）", ex);
                     }
 
                     return true;
@@ -719,6 +970,11 @@ public class EventManager {
         return false;
     }
 
+    /**
+     * 获取符合条件的队伍成员
+     * @param party 队伍
+     * @return 符合条件的成员列表
+     */
     public List<PartyCharacter> getEligibleParty(Party party) {
         if (party == null) {
             return new ArrayList<>();
@@ -738,43 +994,113 @@ public class EventManager {
         return new ArrayList<>();
     }
 
+    /**
+     * 清除PQ
+     * @param eim 事件实例管理器
+     */
     public void clearPQ(EventInstanceManager eim) {
         try {
             iv.invokeFunction("clearPQ", eim);
         } catch (ScriptException | NoSuchMethodException ex) {
-            log.error("Event script clearPQ", ex);
+            log.error("Event script clearPQ（事件脚本清除PQ）", ex);
         }
     }
 
+    /**
+     * 清除PQ并传送到指定地图
+     * @param eim 事件实例管理器
+     * @param toMap 目标地图
+     */
     public void clearPQ(EventInstanceManager eim, MapleMap toMap) {
         try {
             iv.invokeFunction("clearPQ", eim, toMap);
         } catch (ScriptException | NoSuchMethodException ex) {
-            log.error("Event script clearPQ", ex);
+            log.error("Event script clearPQ（事件脚本清除PQ）", ex);
         }
     }
 
+    public long getEventTimeout() {
+        // 默认2h
+        long timeout = 7200000L;
+        try {
+            // 可以在事件脚本定义事件超时时间，如果超过超时时间锁仍未失效，则锁失效
+            timeout = (long) iv.invokeFunction("getEventTimeout");
+        } catch (ScriptException | NoSuchMethodException ignored) {
+
+        }
+        return timeout;
+    }
+
+    public boolean isNobodyInPQ() {
+        try {
+            boolean nobody = true;
+            // 可以在事件脚本定义事件地图，如果地图上没人，则锁失效
+            Object o = iv.invokeFunction("getEventMaps");
+            if (o instanceof List<?> mapIds) {
+                for (Object mapId : mapIds) {
+                    int id;
+                    if (mapId instanceof Number) {
+                        id = ((Number) mapId).intValue();
+                    } else {
+                        id = Integer.parseInt(mapId.toString());
+                    }
+                    // 无效的mapId
+                    if (id <= 0) {
+                        continue;
+                    }
+                    if (!cserv.getMapFactory().getMap(id).getAllPlayers().isEmpty()) {
+                        nobody = false;
+                        break;
+                    }
+                }
+
+            }
+            return nobody;
+        } catch (Exception ignored) {
+
+        }
+        return false;
+    }
+
+    /**
+     * 获取怪物对象
+     * @param mid 怪物ID
+     * @return 怪物对象
+     */
     public Monster getMonster(int mid) {
         return (LifeFactory.getMonster(mid));
     }
 
+    /**
+     * 通知公会准备就绪
+     * @param guildId 公会ID
+     */
     private void exportReadyGuild(Integer guildId) {
         Guild mg = server.getGuild(guildId);
-        String callout = "[Guild Quest] Your guild has been registered to attend to the Sharenian Guild Quest at channel " + this.getChannelServer().getId()
-                + " and HAS JUST STARTED THE STRATEGY PHASE. After 3 minutes, no more guild members will be allowed to join the effort."
-                + " Check out Shuang at the excavation site in Perion for more info.";
+        String callout = "[公会任务] 您的公会已成功报名参加频道 " + this.getChannelServer().getId() + " 的" +
+                "【家族对抗赛】，当前已进入战略准备阶段。3分钟后将禁止新成员加入任务。" +
+                " 请前往勇士之都挖掘现场寻找NPC双了解更多详情。";
 
         mg.dropMessage(6, callout);
     }
 
+    /**
+     * 通知公会队列位置
+     * @param guildId 公会ID
+     * @param place 队列位置
+     */
     private void exportMovedQueueToGuild(Integer guildId, int place) {
         Guild mg = server.getGuild(guildId);
-        String callout = "[Guild Quest] Your guild has been registered to attend to the Sharenian Guild Quest at channel " + this.getChannelServer().getId()
-                + " and is currently on the " + GameConstants.ordinal(place) + " place on the waiting queue.";
+        String callout = "[公会任务] 您的公会已成功报名参加频道 " + this.getChannelServer().getId() + " 的" +
+                "【家族对抗赛】，当前在等待队列中排名第 " + GameConstants.ordinal(place) + " 位。";
 
         mg.dropMessage(6, callout);
     }
 
+    /**
+     * 获取下一个排队的公会
+     * @return 公会ID和会长ID列表
+     */
     private List<Integer> getNextGuildQueue() {
         synchronized (queuedGuilds) {
             Integer guildId = queuedGuilds.poll();
@@ -798,18 +1124,32 @@ public class EventManager {
         }
     }
 
+    /**
+     * 检查队列是否已满
+     * @return 是否已满
+     */
     public boolean isQueueFull() {
         synchronized (queuedGuilds) {
             return queuedGuilds.size() >= GameConfig.getServerInt("event_max_guild_queue");
         }
     }
 
+    /**
+     * 获取队列大小
+     * @return 队列大小
+     */
     public int getQueueSize() {
         synchronized (queuedGuilds) {
             return queuedGuilds.size();
         }
     }
 
+    /**
+     * 添加公会到队列
+     * @param guildId 公会ID
+     * @param leaderId 会长ID
+     * @return 添加结果（-1=已在队列，0=队列已满，1=成功加入，2=成功并立即开始）
+     */
     public byte addGuildToQueue(Integer guildId, Integer leaderId) {
         if (wserv.isGuildQueued(guildId)) {
             return -1;
@@ -846,6 +1186,10 @@ public class EventManager {
         }
     }
 
+    /**
+     * 尝试启动公会实例
+     * @return 是否成功启动
+     */
     public boolean attemptStartGuildInstance() {
         Character chr = null;
         List<Integer> guildInstance = null;
@@ -866,6 +1210,12 @@ public class EventManager {
         }
     }
 
+    /**
+     * 强制开始任务
+     * @param chr 玩家
+     * @param id 任务ID
+     * @param npcid NPC ID
+     */
     public void startQuest(Character chr, int id, int npcid) {
         try {
             Quest.getInstance(id).forceStart(chr, npcid);
@@ -874,6 +1224,12 @@ public class EventManager {
         }
     }
 
+    /**
+     * 强制完成任务
+     * @param chr 玩家
+     * @param id 任务ID
+     * @param npcid NPC ID
+     */
     public void completeQuest(Character chr, int id, int npcid) {
         try {
             Quest.getInstance(id).forceComplete(chr, npcid);
@@ -882,14 +1238,34 @@ public class EventManager {
         }
     }
 
+    /**
+     * 修正运输时间
+     * @param travelTime 旅行时间
+     * @return 修正后的运输时间
+     */
     public int getTransportationTime(int travelTime) {
         return this.getWorldServer().getTransportationTime(travelTime);
     }
 
+    /**
+     * 修正Boss刷新时间
+     * @param BossTime 刷新时间
+     * @return 修正后的Boss刷新时间
+     */
+    public int getBossTime(int BossTime) {
+        return (int) (BossTime * GameConfig.getServerFloat("boss_respawn_mob_time_rate"));
+    }
+    /**
+     * 填充EIM队列
+     */
     private void fillEimQueue() {
-        ThreadManager.getInstance().newTask(new EventManagerTask());  //call new thread to fill up readied instances queue
+        ThreadManager.getInstance().newTask(new EventManagerTask());  // 调用新线程填充准备就绪的实例队列
     }
 
+    /**
+     * 获取准备就绪的实例
+     * @return 事件实例管理器
+     */
     private EventInstanceManager getReadyInstance() {
         queueLock.lock();
         try {
@@ -907,6 +1283,9 @@ public class EventManager {
         }
     }
 
+    /**
+     * 实例化队列中的实例
+     */
     private void instantiateQueuedInstance() {
         int nextEventId;
         queueLock.lock();
@@ -925,7 +1304,7 @@ public class EventManager {
         EventInstanceManager eim = new EventInstanceManager(this, "sampleName" + nextEventId);
         queueLock.lock();
         try {
-            if (this.isDisposed()) {  // EM already disposed
+            if (this.isDisposed()) {  // 事件管理器已释放
                 return;
             }
 
@@ -935,11 +1314,13 @@ public class EventManager {
             queueLock.unlock();
         }
 
-        instantiateQueuedInstance();    // keep filling the queue until reach threshold.
+        instantiateQueuedInstance();    // 持续填充队列直到达到阈值
     }
 
+    /**
+     * 事件管理器任务类
+     */
     private class EventManagerTask implements Runnable {
-
         @Override
         public void run() {
             instantiateQueuedInstance();
