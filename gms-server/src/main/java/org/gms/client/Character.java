@@ -4746,17 +4746,48 @@ public class Character extends AbstractCharacterObject {
     }
     int skillzq = 0;
 
-    public int getSkillzq() {
-        return getBossLog1("坐骑");
+// 读取当前坐骑ID——保持不变
+public int getSkillzq() {
+    return getBossLog1("坐骑", 1); // 只读，不重置、不改time
+}
+    // 把“坐骑”的 count 直接设置为传入的 id（绝对写入，不用增量）
+    public void setSkillzq(final int id) {
+        try (Connection con = DatabaseConnection.getConnection()) {
+            boolean exists;
+            try (PreparedStatement ps = con.prepareStatement(
+                    "SELECT 1 FROM bosslog1 WHERE characterid=? AND bossid=?")) {
+                ps.setInt(1, this.id);              // 你的角色ID字段
+                ps.setString(2, "坐骑");
+                try (ResultSet rs = ps.executeQuery()) { exists = rs.next(); }
+            }
+
+            if (exists) {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "UPDATE bosslog1 SET count=?, type=1, time=CURRENT_TIMESTAMP WHERE characterid=? AND bossid=?")) {
+                    ps.setInt(1, id);
+                    ps.setInt(2, this.id);
+                    ps.setString(3, "坐骑");
+                    ps.executeUpdate();
+                }
+            } else {
+                try (PreparedStatement ps = con.prepareStatement(
+                        "INSERT INTO bosslog1 (characterid, bossid, count, type, time) VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)")) {
+                    ps.setInt(1, this.id);
+                    ps.setString(2, "坐骑");
+                    ps.setInt(3, id);
+                    ps.executeUpdate();
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
+    // 这个随你是否还用得到
     public void gainSkillzq(final int gain) {
         skillzq += gain;
     }
 
-    public void setSkillzq(final int id) {
-        setBossLog1("坐骑", 1, -getBossLog1("坐骑") + id);
-    }
     public int getBossLog1(final String boss) {
         return this.getBossLog1(boss, 0);
     }

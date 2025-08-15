@@ -1,68 +1,69 @@
-
-//------------------------------
-// 全局变量、装饰字串等
-var FY0 = "┏━━━━━━━━━━━━━━━━━━━━━━━┓";
-var FY1 = "┃      - FtMs -     ┃";
-var FY2 = "┃  脚本仿制 　定制脚本 ┃";
-var FY3 = "┃  技术支持 　游戏顾问 ┃";
-var FY4 = "┃  ＷＺ添加 　地图制作 ┃";
-var FY5 = "┃  售登陆器 　售下载器 ┃";
-var FY6 = "┣━━━━━━━━━━━━━━━━━━━━━━━┫";
-var FY7 = "┃  唯一QQ: 303765282 ┃";
-var FY8 = "┗━━━━━━━━━━━━━━━━━━━━━━━┛";
-
 var status = -1;
-var 坐骑ID = []; // 声明全局变量
+var 坐骑ID = [];
 
 function start() {
-status = -1;
-action(1, 0, 0);
+    status = -1;
+    action(1, 0, 0);
 }
 
 function action(mode, type, selection) {
-if (mode == -1) {
-cm.dispose();
-} else {
-if (mode == 1)
-status++;
-else
-status--;
-if (status == -1) {
-cm.dispose();
-}
-else if (status == 0) {
-var text = "请选择需要更换的坐骑\r\n";
-坐骑ID = 获取坐骑ID数组();
-for (var i = 0; i < 坐骑ID.length; i++) {
-text += "#L" + i + "# #v" + 坐骑ID[i] + "#\r\n";
-}
-cm.sendSimple(text);
-}
-else if (status == 1) {
-// 确保转换为数字，如果需要
-var rideId = parseInt(坐骑ID[selection]);
-// 打印调试信息（如服务器允许）
-// cm.说明("切换到坐骑ID：" + rideId);
-cm.getPlayer().setSkillzq(rideId);
-cm.sendOk("#b更换坐骑成功！");
-cm.dispose(); // 结束对话
-}
-}
+    if (mode == -1) {
+        cm.dispose();
+        return;
+    }
+
+    if (mode == 1)
+        status++;
+    else
+        status--;
+
+    if (status == 0) {
+        坐骑ID = 获取坐骑ID数组();
+
+        if (坐骑ID.length === 0) {
+            cm.sendOk("你还没有任何可用的坐骑记录！");
+            cm.dispose();
+            return;
+        }
+
+        var text = "请选择需要更换的坐骑：\r\n";
+        for (var i = 0; i < 坐骑ID.length; i++) {
+            text += "#L" + i + "# #v" + 坐骑ID[i] + "#\r\n";
+        }
+        cm.sendSimple(text);
+    }
+    else if (status == 1) {
+        var rideId = parseInt(坐骑ID[selection]);
+        if (isNaN(rideId)) {
+            cm.sendOk("坐骑 ID 无效，无法切换。");
+            cm.dispose();
+            return;
+        }
+        cm.getPlayer().setSkillzq(rideId);
+        cm.sendOk("#b更换坐骑成功！");
+        cm.dispose();
+    }
 }
 
-function 获取坐骑ID数组(){
-var DatabaseConnection = Packages.org.gms.util.DatabaseConnection;
-var connection = DatabaseConnection.getConnection();
-var sql = "SELECT * FROM bossrank2 WHERE cid = ?";
-var ps = connection.prepareStatement(sql);
-ps.setInt(1, cm.getPlayer().getId());
-var rs = ps.executeQuery();
-var 坐骑ID数组 = [];
-while (rs.next()) {
-坐骑ID数组.push(rs.getString("points"));
-}
-rs.close();
-ps.close();
-connection.close();
-return 坐骑ID数组;
+function 获取坐骑ID数组() {
+    var 坐骑ID数组 = [];
+    try {
+        var DatabaseConnection = Packages.org.gms.util.DatabaseConnection;
+        var connection = DatabaseConnection.getConnection();
+        var sql = "SELECT points FROM bossrank2 WHERE cid = ? AND bossname = '坐骑'";
+        var ps = connection.prepareStatement(sql);
+        ps.setInt(1, cm.getPlayer().getId());
+        var rs = ps.executeQuery();
+
+        while (rs.next()) {
+            坐骑ID数组.push(rs.getString("points"));
+        }
+
+        rs.close();
+        ps.close();
+        connection.close();
+    } catch (e) {
+        cm.sendOk("读取坐骑数据出错：" + e);
+    }
+    return 坐骑ID数组;
 }
