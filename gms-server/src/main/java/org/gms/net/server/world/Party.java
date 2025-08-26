@@ -312,7 +312,7 @@ public class Party {
                 player.sendPacket(PacketCreator.partyStatusMessage(10));
                 return false;
             } else if (player.getAriantColiseum() != null) {
-                player.dropMessage(5, "You cannot request a party creation while participating the Ariant Battle Arena.");
+                player.dropMessage(5, "你正在参与阿里安特竞技场，无法创建队伍。.");
                 return false;
             }
 

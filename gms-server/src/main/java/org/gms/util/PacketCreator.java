@@ -402,12 +402,24 @@ public class PacketCreator {
             if (equip != null) {
                 if (pos < 0) {
                     pos *= -1;
+                    p.writeShort(pos > 100 ? pos - 100 : pos);
+                }
+                else{
+                    p.writeShort(pos);
+                }
+            } else {
+                p.writeByte(pos);
+            }
+        }
+         /*   if (equip != null) {
+                if (pos < 0) {
+                    pos *= -1;
                 }
                 p.writeShort(pos > 100 ? pos - 100 : pos);
             } else {
                 p.writeByte(pos);
             }
-        }
+        }*/
         p.writeByte(itemType);
         p.writeInt(item.getItemId());
         p.writeBool(isCash);
@@ -2444,7 +2456,8 @@ public class PacketCreator {
     public static Packet modifyInventory(boolean updateTick, final List<ModifyInventory> mods) {
         OutPacket p = OutPacket.create(SendOpcode.INVENTORY_OPERATION);
         p.writeBool(updateTick);
-        p.writeByte(mods.size());
+        p.writeShort(mods.size());
+       // p.writeByte(mods.size());
         //p.writeByte(0); v104 :)
         int addMovement = -1;
         for (ModifyInventory mod : mods) {
