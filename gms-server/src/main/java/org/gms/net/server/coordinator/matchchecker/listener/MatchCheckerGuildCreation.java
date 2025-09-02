@@ -140,9 +140,9 @@ public class MatchCheckerGuildCreation implements MatchCheckerListenerRecipe {
                         chr.sendPacket(GuildPackets.showGuildInfo(chr));
 
                         if (cofounder) {
-                            chr.dropMessage(1, "You have successfully cofounded a Guild.");
+                            chr.dropMessage(1, "你已成功创建了一个家族.");
                         } else {
-                            chr.dropMessage(1, "You have successfully joined the new Guild.");
+                            chr.dropMessage(1, "你已成功加入新的家族.");
                         }
                     }
 

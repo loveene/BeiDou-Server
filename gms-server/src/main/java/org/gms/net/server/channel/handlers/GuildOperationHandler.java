@@ -256,32 +256,40 @@ public final class GuildOperationHandler extends AbstractPacketHandler {
                 }
                 Server.getInstance().setGuildNotice(mc.getGuildId(), notice);
                 break;
-            case 0x1E:
-                p.readInt();
+        /*    case 0x1E: { // 成员确认结果
+                int matchType = p.readInt();               // 客户端先写一个保留字段/类型，这里读走即可
+                boolean result = p.readByte() != 0;        // 1=同意, 0=拒绝
+
                 World wserv = c.getWorldServer();
 
-                if (mc.getParty() != null) {
+                // 若玩家已经不在队伍中，说明流程被打断 → 取消本次建会
+                if (mc.getParty() == null) {               // ← 修成 == null（和你原来相反）
                     wserv.getMatchCheckerCoordinator().dismissMatchConfirmation(mc.getId());
-                    return;
+                    break;
                 }
 
-                int leaderid = wserv.getMatchCheckerCoordinator().getMatchConfirmationLeaderid(mc.getId());
-                if (leaderid != -1) {
-                    boolean result = p.readByte() != 0;
-                    if (result && wserv.getMatchCheckerCoordinator().isMatchConfirmationActive(mc.getId())) {
-                        Character leader = wserv.getPlayerStorage().getCharacterById(leaderid);
-                        if (leader != null) {
-                            int partyid = leader.getPartyId();
-                            if (partyid != -1) {
-                                Party.joinParty(mc, partyid, true);    // GMS gimmick "party to form guild" recalled thanks to Vcoc
-                            }
-                        }
-                    }
-
+                // 正常把应答交给协调器统计（是否全员同意由它判断）
+                if (wserv.getMatchCheckerCoordinator().isMatchConfirmationActive(mc.getId())) {
                     wserv.getMatchCheckerCoordinator().answerMatchConfirmation(mc.getId(), result);
                 }
-
                 break;
+            }*/
+            case 0x1E: { // 成员确认结果
+                p.readInt();                        // 丢弃保留字段
+                World wserv = c.getWorldServer();
+
+                int leaderid = wserv.getMatchCheckerCoordinator()
+                        .getMatchConfirmationLeaderid(mc.getId());
+                if (leaderid != -1) {
+                    boolean result = p.readByte() != 0;   // 1=同意, 0=拒绝
+
+                    // 关键：不要在这里根据是否有组队去 dismiss / joinParty
+                    // 交由 MatchCheckerCoordinator + MatchCheckerGuildCreation 统一处理
+                    wserv.getMatchCheckerCoordinator().answerMatchConfirmation(mc.getId(), result);
+                }
+                break;
+            }
+
             default:
                 log.warn("Unhandled GUILD_OPERATION packet: {}", p);
         }
